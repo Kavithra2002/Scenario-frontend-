@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,18 +13,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/contexts/auth-context";
+import { ROLE_DEFAULT_HREF } from "@/types/roles";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { login, isAuthenticated } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) router.replace("/user");
-  }, [isAuthenticated, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,7 +29,10 @@ export default function LoginPage() {
     const result = await login(email, password);
     setLoading(false);
     if (result.ok) {
-      router.replace("/user");
+      // Full page navigation so dashboard loads with auth from localStorage
+      // (avoids client nav race where AuthGuard sees stale unauthenticated state)
+      window.location.href = ROLE_DEFAULT_HREF.user;
+      return;
     } else {
       setError(result.error ?? "Login failed");
     }

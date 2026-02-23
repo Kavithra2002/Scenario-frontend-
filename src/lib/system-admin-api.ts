@@ -3,7 +3,9 @@
  * Replace the stub implementations with real fetch/API calls when the backend is ready.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
+import { getBackendBaseUrl } from "./api-config";
+
+const BASE = getBackendBaseUrl();
 
 // --- User list types & API ---
 

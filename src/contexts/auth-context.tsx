@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { flushSync } from "react-dom";
 
 const AUTH_STORAGE_KEY = "app-auth";
 
@@ -12,6 +13,8 @@ export type AuthUser = {
 type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  /** False until we've read from localStorage (after mount). Keeps server and first client render in sync. */
+  isReady: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => void;
 };
@@ -33,9 +36,11 @@ function getStoredUser(): AuthUser | null {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
+  const [isReady, setIsReady] = React.useState(false);
 
   React.useEffect(() => {
     setUser(getStoredUser());
+    setIsReady(true);
   }, []);
 
   const login = React.useCallback(
@@ -49,12 +54,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: trimmed,
         role: "user",
       };
-      setUser(mockUser);
       try {
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockUser));
       } catch {
         // ignore
       }
+      // Flush state sync so redirect in login page sees isAuthenticated true when dashboard mounts
+      flushSync(() => setUser(mockUser));
       return { ok: true };
     },
     []
@@ -73,10 +79,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       isAuthenticated: !!user,
+      isReady,
       login,
       signOut,
     }),
-    [user, login, signOut]
+    [user, isReady, login, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
