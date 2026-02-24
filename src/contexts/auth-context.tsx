@@ -2,77 +2,62 @@
 
 import * as React from "react";
 import { flushSync } from "react-dom";
+import {
+  login as apiLogin,
+  getMe,
+  clearStoredToken,
+  type AuthUser,
+} from "@/lib/auth-api";
 
-const AUTH_STORAGE_KEY = "app-auth";
-
-export type AuthUser = {
-  email: string;
-  role: "user" | "admin" | "system-admin" | "authorizer";
-};
+export type { AuthUser };
 
 type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  /** False until we've read from localStorage (after mount). Keeps server and first client render in sync. */
+  /** False until we've restored session from token (or determined no token). */
   isReady: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ ok: boolean; user?: AuthUser; error?: string }>;
   signOut: () => void;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
-
-function getStoredUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthUser;
-    if (parsed?.email) return parsed;
-  } catch {
-    // ignore
-  }
-  return null;
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
   const [isReady, setIsReady] = React.useState(false);
 
   React.useEffect(() => {
-    setUser(getStoredUser());
-    setIsReady(true);
+    let cancelled = false;
+    (async () => {
+      const result = await getMe();
+      if (cancelled) return;
+      if (result.ok) {
+        setUser(result.user);
+      } else {
+        setUser(null);
+      }
+      setIsReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = React.useCallback(
-    async (email: string, _password: string): Promise<{ ok: boolean; error?: string }> => {
-      // Mock: accept any non-empty email. Backend will replace this.
-      const trimmed = email.trim();
-      if (!trimmed) {
-        return { ok: false, error: "Email is required" };
+    async (email: string, password: string): Promise<{ ok: boolean; user?: AuthUser; error?: string }> => {
+      const result = await apiLogin(email, password);
+      if (result.ok) {
+        flushSync(() => setUser(result.user));
+        return { ok: true, user: result.user };
       }
-      const mockUser: AuthUser = {
-        email: trimmed,
-        role: "user",
-      };
-      try {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockUser));
-      } catch {
-        // ignore
-      }
-      // Flush state sync so redirect in login page sees isAuthenticated true when dashboard mounts
-      flushSync(() => setUser(mockUser));
-      return { ok: true };
+      return { ok: false, error: result.error };
     },
     []
   );
 
   const signOut = React.useCallback(() => {
     setUser(null);
-    try {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    clearStoredToken();
   }, []);
 
   const value = React.useMemo(

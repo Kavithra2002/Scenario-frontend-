@@ -21,12 +21,13 @@ import { UserRole } from "@/types/roles";
 
 const ROLES: UserRole[] = ["user", "admin", "system-admin", "authorizer"];
 
-const emptyForm: CreateUserPayload = {
+const emptyForm: CreateUserPayload & { password?: string } = {
   firstName: "",
   lastName: "",
   email: "",
   contact: "",
   role: "user",
+  password: "",
 };
 
 interface UserFormDialogProps {
@@ -44,7 +45,7 @@ export function UserFormDialog({
   onSuccess,
 }: UserFormDialogProps) {
   const isEdit = !!user;
-  const [form, setForm] = useState<CreateUserPayload>(emptyForm);
+  const [form, setForm] = useState<CreateUserPayload & { password?: string }>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +59,7 @@ export function UserFormDialog({
           email: user.email,
           contact: user.contact,
           role: user.role as UserRole,
+          password: "",
         });
       } else {
         setForm(emptyForm);
@@ -65,7 +67,7 @@ export function UserFormDialog({
     }
   }, [open, user]);
 
-  const updateField = (key: keyof CreateUserPayload, value: string) => {
+  const updateField = (key: keyof CreateUserPayload | "password", value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setError(null);
   };
@@ -77,7 +79,7 @@ export function UserFormDialog({
     try {
       const result = isEdit
         ? await updateUser({ ...form, id: user.id })
-        : await createUser(form);
+        : await createUser({ ...form, password: form.password || undefined });
       if (result.success) {
         onOpenChange(false);
         onSuccess();
@@ -98,8 +100,8 @@ export function UserFormDialog({
           <DialogTitle>{isEdit ? "Update user" : "Add user"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Edit the user details below. Data will be sent to the backend when connected."
-              : "Enter the new user details. Data will be sent to the backend when connected."}
+              ? "Edit the user details below."
+              : "Enter the new user details. The user will be created in the system and can sign in with the email and password you set."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -165,6 +167,25 @@ export function UserFormDialog({
               placeholder="Phone or contact"
             />
           </div>
+          {!isEdit && (
+            <div className="space-y-2">
+              <label
+                htmlFor="user-password"
+                className="text-sm font-medium leading-none"
+              >
+                Initial password
+              </label>
+              <Input
+                id="user-password"
+                type="password"
+                value={form.password ?? ""}
+                onChange={(e) => updateField("password", e.target.value)}
+                placeholder="Set password for first sign-in"
+                required={!isEdit}
+                autoComplete="new-password"
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <label
               htmlFor="user-role"

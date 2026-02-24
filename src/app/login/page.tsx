@@ -28,9 +28,11 @@ export default function LoginPage() {
     setLoading(true);
     const result = await login(email, password);
     setLoading(false);
-    if (result.ok) {
-      // Full page navigation so dashboard loads with auth from localStorage
-      // (avoids client nav race where AuthGuard sees stale unauthenticated state)
+    if (result.ok && result.user) {
+      // Full page navigation so dashboard loads with auth from token
+      window.location.href = ROLE_DEFAULT_HREF[result.user.role];
+      return;
+    } else if (result.ok) {
       window.location.href = ROLE_DEFAULT_HREF.user;
       return;
     } else {
@@ -112,10 +114,6 @@ export default function LoginPage() {
             >
               {loading ? "Signing in…" : "Sign in"}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              Demo: any email and password will work. Backend will be connected
-              later.
-            </p>
           </CardFooter>
         </form>
       </Card>
