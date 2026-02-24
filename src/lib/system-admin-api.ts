@@ -34,6 +34,26 @@ export interface UserListFilters {
   search?: string;
 }
 
+/** In-memory cache for default user list (no filters). Used by preload so User List page shows instantly. */
+let cachedUserList: SystemAdminUser[] | null = null;
+
+/** Get cached user list if preloaded (default filters only). */
+export function getCachedUserList(): SystemAdminUser[] | null {
+  return cachedUserList;
+}
+
+/** Preload user list in background (default filters). Call when dashboard loads for system-admin to make User List open instantly. */
+export function preloadUserList(): void {
+  fetchUserList({}).then((data) => {
+    cachedUserList = data;
+  });
+}
+
+/** Clear user list cache (e.g. after create/update/delete so next load is fresh). */
+export function clearUserListCache(): void {
+  cachedUserList = null;
+}
+
 /** Fetch user list from backend. GET /system-admin/users (or your backend route). Returns [] on error so UI can degrade gracefully. */
 export async function fetchUserList(
   filters?: UserListFilters
@@ -47,7 +67,9 @@ export async function fetchUserList(
     const res = await fetch(url, { headers: getAuthHeaders() });
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : data.users ?? data.data ?? [];
+    const list = Array.isArray(data) ? data : data.users ?? data.data ?? [];
+    if (!qs) cachedUserList = list;
+    return list;
   } catch {
     return [];
   }
@@ -122,6 +144,22 @@ export async function updateUser(
   };
 }
 
+/** Delete a user. DELETE /system-admin/users/:id. Removes user from DB. */
+export async function deleteUser(
+  id: string | number
+): Promise<{ success: boolean; message?: string }> {
+  const res = await fetch(`${API}/system-admin/users/${String(id)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) return { success: true };
+  return {
+    success: false,
+    message: data.message ?? data.error ?? (res.status === 404 ? "User not found" : "Failed to delete user"),
+  };
+}
+
 // --- Application integration (database) types & API ---
 
 export interface DatabaseConfig {
@@ -137,38 +175,65 @@ export interface TestConnectionResult {
   message?: string;
 }
 
-/** Test database connection. Wire to POST /api/system-admin/integration/database/test. */
+const INTEGRATION = `${API}/system-admin/integration`;
+
+/** Fetch current database config from backend. GET /api/system-admin/integration/database. Returns null on error or 404. */
+export async function fetchDatabaseConfig(): Promise<DatabaseConfig | null> {
+  try {
+    const res = await fetch(`${INTEGRATION}/database`, { headers: getAuthHeaders() });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data.data ?? data.config ?? data;
+    return {
+      host: String(raw.host ?? ""),
+      port: String(raw.port ?? ""),
+      databaseName: String(raw.databaseName ?? raw.database_name ?? ""),
+      username: String(raw.username ?? ""),
+      password: String(raw.password ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Test database connection. POST /api/system-admin/integration/database/test. */
 export async function testDatabaseConnection(
   config: DatabaseConfig
 ): Promise<TestConnectionResult> {
-  // When backend is ready:
-  // const res = await fetch(`${BASE}/system-admin/integration/database/test`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify(config),
-  // });
-  // const data = await res.json();
-  // return { success: res.ok, message: data.message };
-  return {
-    success: false,
-    message: "Backend not connected. Wire testDatabaseConnection in src/lib/system-admin-api.ts",
-  };
+  try {
+    const res = await fetch(`${INTEGRATION}/database/test`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(config),
+    });
+    const data = await res.json().catch(() => ({}));
+    const message = data.message ?? data.error ?? (res.ok ? "Connection successful" : "Connection failed");
+    return { success: res.ok, message };
+  } catch (e) {
+    return {
+      success: false,
+      message: e instanceof Error ? e.message : "Network error",
+    };
+  }
 }
 
-/** Save database config. Wire to POST /api/system-admin/integration/database. */
+/** Save database config. PUT /api/system-admin/integration/database. */
 export async function saveDatabaseConfig(
   config: DatabaseConfig
 ): Promise<{ success: boolean; message?: string }> {
-  // When backend is ready:
-  // const res = await fetch(`${BASE}/system-admin/integration/database`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify(config),
-  // });
-  // const data = await res.json();
-  // return { success: res.ok, message: data.message };
-  return {
-    success: false,
-    message: "Backend not connected. Wire saveDatabaseConfig in src/lib/system-admin-api.ts",
-  };
+  try {
+    const res = await fetch(`${INTEGRATION}/database`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(config),
+    });
+    const data = await res.json().catch(() => ({}));
+    const message = data.message ?? data.error ?? (res.ok ? "Configuration saved" : "Save failed");
+    return { success: res.ok, message };
+  } catch (e) {
+    return {
+      success: false,
+      message: e instanceof Error ? e.message : "Network error",
+    };
+  }
 }

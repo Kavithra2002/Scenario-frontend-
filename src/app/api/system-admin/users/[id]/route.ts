@@ -74,7 +74,7 @@ export async function PATCH(
     const values: (string | number)[] = [];
     let i = 1;
     if (firstName !== undefined || lastName !== undefined) {
-      const name = [firstName ?? "", lastName ?? ""].filter(Boolean).join(" ") || null;
+      const name = [firstName ?? "", lastName ?? ""].filter(Boolean).join(" ") || "";
       updates.push(`name = $${i}`);
       values.push(name);
       i++;

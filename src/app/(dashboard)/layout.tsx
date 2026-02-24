@@ -3,6 +3,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { HeaderUserSwitcher } from "@/components/header-user-switcher";
 import { AuthGuard } from "@/components/auth-guard";
 import { DashboardContentWrapper } from "@/components/dashboard-content-wrapper";
+import { RoutePrefetcher } from "@/components/route-prefetcher";
+import { DataPreloader } from "@/components/data-preloader";
 
 export default function DashboardLayout({
   children,
@@ -11,6 +13,8 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
+      <RoutePrefetcher />
+      <DataPreloader />
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>

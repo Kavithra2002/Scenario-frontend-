@@ -54,11 +54,11 @@ export function UserFormDialog({
       setError(null);
       if (user) {
         setForm({
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          contact: user.contact,
-          role: user.role as UserRole,
+          firstName: user.firstName ?? "",
+          lastName: user.lastName ?? "",
+          email: user.email ?? "",
+          contact: user.contact ?? "",
+          role: (user.role as UserRole) ?? "user",
           password: "",
         });
       } else {
@@ -115,7 +115,7 @@ export function UserFormDialog({
               </label>
               <Input
                 id="user-firstName"
-                value={form.firstName}
+                value={form.firstName ?? ""}
                 onChange={(e) => updateField("firstName", e.target.value)}
                 placeholder="First name"
                 required
@@ -130,7 +130,7 @@ export function UserFormDialog({
               </label>
               <Input
                 id="user-lastName"
-                value={form.lastName}
+                value={form.lastName ?? ""}
                 onChange={(e) => updateField("lastName", e.target.value)}
                 placeholder="Last name"
                 required
@@ -147,7 +147,7 @@ export function UserFormDialog({
             <Input
               id="user-email"
               type="email"
-              value={form.email}
+              value={form.email ?? ""}
               onChange={(e) => updateField("email", e.target.value)}
               placeholder="email@example.com"
               required
@@ -162,7 +162,7 @@ export function UserFormDialog({
             </label>
             <Input
               id="user-contact"
-              value={form.contact}
+              value={form.contact ?? ""}
               onChange={(e) => updateField("contact", e.target.value)}
               placeholder="Phone or contact"
             />

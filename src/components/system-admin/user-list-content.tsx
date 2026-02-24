@@ -5,7 +5,6 @@ import {
   Search,
   Download,
   Plus,
-  RefreshCw,
   MoreHorizontal,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,8 +25,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   fetchUserList,
+  getCachedUserList,
+  clearUserListCache,
   exportUsers,
+  deleteUser,
   type SystemAdminUser,
   type UserListFilters,
 } from "@/lib/system-admin-api";
@@ -46,16 +56,22 @@ function EmptyState() {
   );
 }
 
+const emptyFilters: UserListFilters = {};
+
 export function UserListContent() {
-  const [users, setUsers] = useState<SystemAdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = getCachedUserList();
+  const [users, setUsers] = useState<SystemAdminUser[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<UserListFilters>({});
+  const [filters, setFilters] = useState<UserListFilters>(emptyFilters);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemAdminUser | null>(null);
+  const [userToDelete, setUserToDelete] = useState<SystemAdminUser | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const loadUsers = async () => {
-    setLoading(true);
+  const loadUsers = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const data = await fetchUserList(filters);
       setUsers(data);
@@ -67,7 +83,8 @@ export function UserListContent() {
   // Stable ref so dependency array size stays constant (avoids React "changed size" error)
   const mountRef = useRef(null);
   useEffect(() => {
-    loadUsers();
+    const hasCache = !!getCachedUserList();
+    loadUsers(!hasCache);
     // When backend is ready, add filters and use [mountRef, filters]
   }, [mountRef]);
 
@@ -95,6 +112,24 @@ export function UserListContent() {
           u.email.toLowerCase().includes(search.toLowerCase())
       )
     : users;
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setDeletingId(userToDelete.id);
+    setDeleteError(null);
+    try {
+      const result = await deleteUser(userToDelete.id);
+      if (result.success) {
+        setUserToDelete(null);
+        clearUserListCache();
+        await loadUsers();
+      } else {
+        setDeleteError(result.message ?? "Failed to delete user");
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -130,16 +165,6 @@ export function UserListContent() {
             <Button onClick={() => { setEditingUser(null); setUserDialogOpen(true); }}>
               <Plus className="size-4" />
               Add User
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setEditingUser(null);
-                setUserDialogOpen(true);
-              }}
-            >
-              <RefreshCw className="size-4" />
-              Update User
             </Button>
           </div>
         </CardHeader>
@@ -207,7 +232,14 @@ export function UserListContent() {
                             >
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              disabled={deletingId === user.id}
+                              onSelect={() => {
+                                setUserToDelete(user);
+                                setDeleteError(null);
+                              }}
+                            >
                               Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -223,11 +255,63 @@ export function UserListContent() {
       </Card>
 
       <UserFormDialog
+        key={editingUser?.id ?? "new"}
         open={userDialogOpen}
-        onOpenChange={setUserDialogOpen}
+        onOpenChange={(open) => {
+          setUserDialogOpen(open);
+          if (!open) setEditingUser(null);
+        }}
         user={editingUser}
-        onSuccess={loadUsers}
+        onSuccess={() => {
+          clearUserListCache();
+          loadUsers();
+        }}
       />
+
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUserToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={!deletingId}>
+          <DialogHeader>
+            <DialogTitle>Delete user?</DialogTitle>
+            <DialogDescription>
+              {userToDelete
+                ? `Delete user (${userToDelete.email})? This cannot be undone.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-destructive text-sm">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!deletingId}
+              onClick={() => {
+                setUserToDelete(null);
+                setDeleteError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!!deletingId}
+              onClick={handleConfirmDelete}
+            >
+              {deletingId ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

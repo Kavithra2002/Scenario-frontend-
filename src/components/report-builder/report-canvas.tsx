@@ -1,100 +1,30 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/lib/utils";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
+import { ReportBlockComponent } from "./report-block";
+import { computeRows } from "./row-layout";
+import { BLOCK_DEFINITIONS } from "./block-definitions";
 import type { ReportBlock, BlockType } from "./types";
+import type { CanvasSize } from "./types";
 import { REPORT_CANVAS_ID } from "./constants";
-import { BLOCK_TYPE_LABELS } from "./types";
+import { CANVAS_SIZE_PORTRAIT_PX } from "./types";
+import { Button } from "@/components/ui/button";
 import {
-  Type,
-  AlignLeft,
-  Table2,
-  BarChart3,
-  TrendingUp,
-  Image,
-  Minus,
-  GripVertical,
-  type LucideIcon,
-} from "lucide-react";
-
-const BLOCK_ICONS: Record<BlockType, LucideIcon> = {
-  title: Type,
-  text: AlignLeft,
-  table: Table2,
-  chart: BarChart3,
-  kpi: TrendingUp,
-  image: Image,
-  divider: Minus,
-};
-
-function CanvasBlock({
-  block,
-  isSelected,
-  onSelect,
-}: {
-  block: ReportBlock;
-  isSelected: boolean;
-  onSelect: () => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: block.id,
-    data: { type: "canvas", block },
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const Icon = BLOCK_ICONS[block.type];
-  const label = BLOCK_TYPE_LABELS[block.type];
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "group flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-2 transition-colors",
-        isSelected
-          ? "border-primary ring-2 ring-primary/20"
-          : "border-border hover:border-muted-foreground/30",
-        isDragging && "opacity-50"
-      )}
-      onClick={onSelect}
-    >
-      <button
-        type="button"
-        className="touch-none cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
-        {...listeners}
-        {...attributes}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <GripVertical className="size-4" />
-      </button>
-      <Icon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="text-sm font-medium">{label}</span>
-    </div>
-  );
-}
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 interface ReportCanvasProps {
   blocks: ReportBlock[];
   selectedBlockId: string | null;
   onSelectBlock: (id: string | null) => void;
-  canvasSize: string;
+  onAddBlock?: (blockType: BlockType) => void;
+  canvasSize?: CanvasSize;
   isOver?: boolean;
 }
 
@@ -102,7 +32,8 @@ export function ReportCanvas({
   blocks,
   selectedBlockId,
   onSelectBlock,
-  canvasSize,
+  onAddBlock,
+  canvasSize = "A4",
   isOver,
 }: ReportCanvasProps) {
   const { setNodeRef, isOver: isCanvasOver } = useDroppable({
@@ -111,46 +42,119 @@ export function ReportCanvas({
   });
 
   const activeOver = isOver ?? isCanvasOver;
+  const rows = computeRows(blocks);
+  const { width: canvasWidthPx, height: canvasHeightPx } =
+    CANVAS_SIZE_PORTRAIT_PX[canvasSize];
+
+  const handleSelectBlockType = (blockType: BlockType) => {
+    onAddBlock?.(blockType);
+  };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-start overflow-auto p-6">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-auto">
       <div
-        ref={setNodeRef}
-        className={cn(
-          "flex min-h-[500px] w-full max-w-[210mm] flex-col gap-3 rounded-lg border-2 border-dashed bg-muted/20 p-6 transition-colors",
-          activeOver && "border-primary/50 bg-primary/5"
-        )}
-        style={{
-          minHeight: canvasSize === "A3" ? "297mm" : canvasSize === "Letter" ? "279mm" : "297mm",
-          maxWidth: canvasSize === "A3" ? "420mm" : canvasSize === "Letter" ? "216mm" : "210mm",
-        }}
+        className="mx-auto w-full flex-1 p-6 pb-14"
+        style={{ maxWidth: canvasWidthPx ? `${canvasWidthPx}px` : undefined }}
       >
-        {blocks.length === 0 ? (
-          <div
-            className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground"
-            onClick={() => onSelectBlock(null)}
-          >
-            <p className="font-medium">Drop blocks here</p>
-            <p className="text-sm">
-              Drag blocks from the left panel to build your report.
-            </p>
-          </div>
-        ) : (
+        <div
+          ref={setNodeRef}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("[data-sortable]")) return;
+            onSelectBlock(null);
+          }}
+          className={cn(
+            "min-w-0 overflow-hidden rounded-xl border-2 border-dashed bg-muted/20 p-6 transition-colors",
+            activeOver && "border-primary/50 bg-primary/5"
+          )}
+          style={{
+            minHeight: canvasHeightPx ? `${canvasHeightPx}px` : undefined,
+          }}
+        >
           <SortableContext
             items={blocks.map((b) => b.id)}
             strategy={verticalListSortingStrategy}
           >
-            {blocks.map((block) => (
-              <CanvasBlock
-                key={block.id}
-                block={block}
-                isSelected={selectedBlockId === block.id}
-                onSelect={() => onSelectBlock(block.id)}
-              />
-            ))}
+            <div className="flex min-w-0 flex-col gap-3 overflow-hidden">
+              {blocks.length === 0 && (
+                <div
+                  className="flex flex-1 flex-col items-center justify-center py-16 text-center text-muted-foreground"
+                  onClick={() => onSelectBlock(null)}
+                >
+                  <p className="font-medium">Drop blocks here</p>
+                  <p className="mt-1 text-sm">
+                    Drag blocks from the left panel or use the button below to
+                    build your report.
+                  </p>
+                </div>
+              )}
+              {rows.map((row) => (
+                <div
+                  key={row.map((b) => b.id).join("-")}
+                  data-sortable
+                  className="flex min-w-0 w-full flex-row items-stretch gap-2 overflow-hidden"
+                >
+                  {row.map((block) => (
+                    <div
+                      key={block.id}
+                      data-sortable
+                      className="min-w-0 max-w-full flex-shrink-0 overflow-hidden"
+                      style={{
+                        width:
+                          row.length === 1
+                            ? "100%"
+                            : (block.props?.width as string) ?? "100%",
+                      }}
+                    >
+                      <ReportBlockComponent
+                        block={block}
+                        isSelected={selectedBlockId === block.id}
+                        onSelect={() => onSelectBlock(block.id)}
+                        isAloneInRow={row.length === 1}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </SortableContext>
-        )}
+        </div>
       </div>
+
+      {onAddBlock && (
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 justify-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="outline"
+                title="Add block"
+                aria-label="Add block"
+                className="h-10 w-10 rounded-full border-2 border-dashed border-border bg-card shadow-md hover:bg-accent/50"
+              >
+                <Plus className="size-5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="center" className="w-56">
+              <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Add block
+              </p>
+              {BLOCK_DEFINITIONS.map((def) => {
+                const Icon = def.icon;
+                return (
+                  <DropdownMenuItem
+                    key={def.type}
+                    onClick={() => handleSelectBlockType(def.type)}
+                    className="gap-3"
+                  >
+                    <Icon className="size-5 shrink-0" />
+                    {def.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
     </div>
   );
 }
